@@ -22,7 +22,7 @@ steps:
         "--image",
         "us-central1-docker.pkg.dev/${PROJECT_ID}/ilg-exam360-demo-fastapi/${_IMAGE_NAME}:latest",
         "--port",
-        "80",
+        "8080",
         "--region",
         "us-central1",
         "--platform",
