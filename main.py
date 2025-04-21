@@ -1,3 +1,4 @@
+# Edited by ChatGPT on 2025-04-21
 from livekit import AccessToken, VideoGrant
 from pydantic import BaseModel
 from fastapi import FastAPI
@@ -16,6 +17,25 @@ app.add_middleware(
 
 # Global in-memory device registry
 device_registry = {}  # identity -> {room, status, last_seen}
+room_assignments = {}  # identity -> room
+room_index = 0
+MAX_PER_ROOM = 16
+
+class AssignRoomRequest(BaseModel):
+    identity: str
+
+@app.post("/api/assign-room")
+def assign_room(data: AssignRoomRequest):
+    global room_index
+    if data.identity in room_assignments:
+        room = room_assignments[data.identity]
+    else:
+        current_count = list(room_assignments.values()).count(f"proctor-room-{room_index+1}")
+        if current_count >= MAX_PER_ROOM:
+            room_index += 1
+        room = f"proctor-room-{room_index+1}"
+        room_assignments[data.identity] = room
+    return {"room": room}
 
 # Replace these with your actual LiveKit credentials
 LIVEKIT_API_KEY = "APIJtTEpvwM9e3y"
@@ -85,4 +105,4 @@ def disconnect(data: DisconnectRequest):
 
 @app.get("/api/version")
 def get_version():
-    return {"version": "1.0.0"}
+    return {"version": "1.0.1"}
