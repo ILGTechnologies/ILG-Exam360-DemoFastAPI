@@ -106,3 +106,22 @@ def disconnect(data: DisconnectRequest):
 @app.get("/api/version")
 def get_version():
     return {"version": "1.0.1"}
+
+@app.get("/api/room-members")
+def get_room_members():
+    threshold = datetime.utcnow() - timedelta(minutes=5)
+    room_members = {}
+    for identity, info in device_registry.items():
+        if info['last_seen'] > threshold:
+            room = info['room']
+            room_members.setdefault(room, []).append(identity)
+    return {"room_members": room_members}
+
+@app.get("/api/room-members/{room}")
+def get_members_for_room(room: str):
+    threshold = datetime.utcnow() - timedelta(minutes=5)
+    members = [
+        identity for identity, info in device_registry.items()
+        if info['room'] == room and info['last_seen'] > threshold
+    ]
+    return {"room": room, "members": members}
