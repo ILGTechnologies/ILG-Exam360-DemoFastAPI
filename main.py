@@ -25,9 +25,12 @@ class TokenRequest(BaseModel):
     identity: str
     room: str
 
-class HeartbeatRequest(BaseModel):
+class RegisterRequest(BaseModel):
     identity: str
     room: str
+
+class DisconnectRequest(BaseModel):
+    identity: str
 
 @app.post("/api/token")
 def get_token(data: TokenRequest):
@@ -43,8 +46,8 @@ def get_token(data: TokenRequest):
     token = at.to_jwt()
     return {"token": token}
 
-@app.post("/api/heartbeat")
-def heartbeat(data: HeartbeatRequest):
+@app.post("/api/register")
+def register(data: RegisterRequest):
     device_registry[data.identity] = {
         "room": data.room,
         "status": "connected",
@@ -60,3 +63,26 @@ def get_active_devices():
         if info['last_seen'] > threshold
     }
     return {"active_devices": active}
+
+@app.get("/api/rooms")
+def get_active_rooms():
+    threshold = datetime.utcnow() - timedelta(minutes=5)
+    room_counts = {}
+    for identity, info in device_registry.items():
+        if info['last_seen'] > threshold:
+            room = info['room']
+            room_counts[room] = room_counts.get(room, 0) + 1
+    return {"rooms": room_counts}
+
+@app.post("/api/disconnect")
+def disconnect(data: DisconnectRequest):
+    if data.identity in device_registry:
+        device_registry[data.identity]["status"] = "disconnected"
+        device_registry[data.identity]["last_seen"] = datetime.utcnow()
+        return {"message": f"{data.identity} marked as disconnected"}
+    else:
+        return {"message": f"{data.identity} not found"}, 404
+
+@app.get("/api/version")
+def get_version():
+    return {"version": "1.0.0"}
