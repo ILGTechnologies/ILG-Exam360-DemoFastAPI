@@ -125,3 +125,7 @@ def get_members_for_room(room: str):
         if info['room'] == room and info['last_seen'] > threshold
     ]
     return {"room": room, "members": members}
+
+@app.get("/api/debug-registry")
+def debug_registry():
+    return device_registry
