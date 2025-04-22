@@ -1,4 +1,3 @@
-# Edited by ChatGPT on 2025-04-21
 from livekit import AccessToken, VideoGrant
 from pydantic import BaseModel
 from fastapi import FastAPI
@@ -38,8 +37,11 @@ def assign_room(data: AssignRoomRequest):
     return {"room": room}
 
 # Replace these with your actual LiveKit credentials
-LIVEKIT_API_KEY = "APIJtTEpvwM9e3y"
-LIVEKIT_API_SECRET = "KuhYBMLHvrgJelnFM9BRXoN5durqDDcqRYIISNe0mt6"
+#LIVEKIT_API_KEY = "APIJtTEpvwM9e3y"
+#LIVEKIT_API_SECRET = "KuhYBMLHvrgJelnFM9BRXoN5durqDDcqRYIISNe0mt6"
+
+LIVEKIT_API_KEY = APIXCY4TPk3aHQn
+LIVEKIT_API_SECRET = xVPJcVahISSgtQwuBI9EidyRojZB2EjDO4KTjG9NzDN
 
 class TokenRequest(BaseModel):
     identity: str
@@ -129,3 +131,11 @@ def get_members_for_room(room: str):
 @app.get("/api/debug-registry")
 def debug_registry():
     return device_registry
+
+@app.post("/api/clear-database")
+def clear_database():
+    global device_registry, room_assignments, room_index
+    device_registry.clear()
+    room_assignments.clear()
+    room_index = 0
+    return {"message": "In-memory database has been cleared."}
