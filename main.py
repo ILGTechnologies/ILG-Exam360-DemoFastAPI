@@ -9,7 +9,7 @@ app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # or use ["http://localhost:5173"] for tighter security
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -145,5 +145,9 @@ def clear_database():
 
 @app.get("/api/livekit-participants/{room}")
 def get_livekit_participants(room: str):
-    participants = room_service.list_participants(room)
-    return {"room": room, "participants": [p.to_dict() for p in participants]}
+    try:
+        participants = room_service.list_participants(room)
+        return {"room": room, "participants": [p.to_dict() for p in participants]}
+    except Exception as e:
+        print(f"❌ Error listing participants for room '{room}': {e}")
+        return {"error": str(e)}, 500
