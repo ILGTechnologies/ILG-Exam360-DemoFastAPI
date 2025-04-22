@@ -40,8 +40,8 @@ def assign_room(data: AssignRoomRequest):
 #LIVEKIT_API_KEY = "APIJtTEpvwM9e3y"
 #LIVEKIT_API_SECRET = "KuhYBMLHvrgJelnFM9BRXoN5durqDDcqRYIISNe0mt6"
 
-LIVEKIT_API_KEY = APIXCY4TPk3aHQn
-LIVEKIT_API_SECRET = xVPJcVahISSgtQwuBI9EidyRojZB2EjDO4KTjG9NzDN
+LIVEKIT_API_KEY = "APIXCY4TPk3aHQn"
+LIVEKIT_API_SECRET = "xVPJcVahISSgtQwuBI9EidyRojZB2EjDO4KTjG9NzDN"
 
 class TokenRequest(BaseModel):
     identity: str
