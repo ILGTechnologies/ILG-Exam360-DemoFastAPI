@@ -132,7 +132,7 @@ def get_members_for_room(room: str):
 def debug_registry():
     return device_registry
 
-@app.post("/api/clear-database")
+@app.get("/api/clear-database")
 def clear_database():
     global device_registry, room_assignments, room_index
     device_registry.clear()
