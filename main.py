@@ -18,7 +18,7 @@ app.add_middleware(
 device_registry = {}  # identity -> {room, status, last_seen}
 room_assignments = {}  # identity -> room
 room_index = 0
-MAX_PER_ROOM = 16
+MAX_PER_ROOM = 4
 
 class AssignRoomRequest(BaseModel):
     identity: str
