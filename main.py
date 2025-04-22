@@ -1,4 +1,4 @@
-from livekit import AccessToken, VideoGrant
+from livekit import AccessToken, VideoGrant, RoomServiceClient
 from pydantic import BaseModel
 from fastapi import FastAPI
 
@@ -36,12 +36,15 @@ def assign_room(data: AssignRoomRequest):
         room_assignments[data.identity] = room
     return {"room": room}
 
+
 # Replace these with your actual LiveKit credentials
 #LIVEKIT_API_KEY = "APIJtTEpvwM9e3y"
 #LIVEKIT_API_SECRET = "KuhYBMLHvrgJelnFM9BRXoN5durqDDcqRYIISNe0mt6"
 
 LIVEKIT_API_KEY = "APIXCY4TPk3aHQn"
 LIVEKIT_API_SECRET = "xVPJcVahISSgtQwuBI9EidyRojZB2EjDO4KTjG9NzDN"
+LIVEKIT_HOST = "https://demoapp-g27k0q6r.livekit.cloud"
+room_service = RoomServiceClient(LIVEKIT_HOST, LIVEKIT_API_KEY, LIVEKIT_API_SECRET)
 
 class TokenRequest(BaseModel):
     identity: str
@@ -139,3 +142,8 @@ def clear_database():
     room_assignments.clear()
     room_index = 0
     return {"message": "In-memory database has been cleared."}
+
+@app.get("/api/livekit-participants/{room}")
+def get_livekit_participants(room: str):
+    participants = room_service.list_participants(room)
+    return {"room": room, "participants": [p.to_dict() for p in participants]}
