@@ -147,6 +147,7 @@ def clear_database():
 def get_livekit_participants(room: str):
     try:
         participants = room_service.list_participants(room)
+        print(f"🔍 Raw participants for room '{room}':", participants)
         return {"room": room, "participants": [vars(p) for p in participants]}
     except Exception as e:
         print(f"❌ Error listing participants for room '{room}': {e}")
