@@ -1,4 +1,3 @@
 fastapi
 uvicorn
-livekit-api
-git+https://github.com/livekit/livekit-server-sdk-python.git@main
+Livekit-api
