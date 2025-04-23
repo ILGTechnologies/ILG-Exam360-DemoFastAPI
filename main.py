@@ -29,7 +29,7 @@ class AssignRoomRequest(BaseModel):
 def assign_room(data: AssignRoomRequest):
     global room_index
 
-    # Count current assignments (active + disconnected)
+    # Count current assignments
     current_total = len(room_assignments)
     if current_total >= MAX_TOTAL_PARTICIPANTS:
         return {"room": None, "retry": 30}
@@ -37,19 +37,36 @@ def assign_room(data: AssignRoomRequest):
     if data.identity in room_assignments:
         room = room_assignments[data.identity]
     else:
-        # Try to find a room that isn't full (<= MAX_PER_ROOM)
+        is_suspicious = device_registry.get(data.identity, {}).get("suspicious", False)
+
         for i in range(room_index + 1):
             room_id = f"proctor-room-{i+1}"
-            count = list(room_assignments.values()).count(room_id)
-            if count < MAX_PER_ROOM:
+
+            regular_count = sum(
+                1 for identity, info in device_registry.items()
+                if info.get("room") == room_id and not info.get("suspicious", False)
+            )
+            suspicious_count = sum(
+                1 for identity, info in device_registry.items()
+                if info.get("room") == room_id and info.get("suspicious", False)
+            )
+
+            if (not is_suspicious and regular_count < MAX_PER_ROOM) or \
+               (is_suspicious and suspicious_count < ROOM_BUFFER):
                 room = room_id
                 break
         else:
-            # No available room, create new
+            # No suitable room, create new
             room_index += 1
             room = f"proctor-room-{room_index+1}"
 
         room_assignments[data.identity] = room
+        device_registry[data.identity] = {
+            "room": room,
+            "status": "connected",
+            "last_seen": datetime.utcnow(),
+            "suspicious": is_suspicious
+        }
 
     return {"room": room}
 
