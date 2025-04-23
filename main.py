@@ -44,7 +44,8 @@ async def assign_room(data: AssignRoomRequest):
         else:
             # Strictly enforce MAX_PER_ROOM limit using device_registry (connected users per room)
             room_index = 0
-            for i in range(room_index + 1):
+            for i in range(100):
+                room_index += 1
                 room_id = f"proctor-room-{i+1}"
                 connected_count = sum(
                     1 for info in device_registry.values()
@@ -53,8 +54,6 @@ async def assign_room(data: AssignRoomRequest):
                 
                 if connected_count < MAX_PER_ROOM:
                     break
-
-                room_index += 1
     
             room = f"proctor-room-{room_index}"
 
@@ -124,9 +123,8 @@ def get_active_devices():
 def get_active_rooms():
     room_counts = {}
     for identity, info in device_registry.items():
-        if info.get("status") == "connected":
-            room = info["room"]
-            room_counts[room] = room_counts.get(room, 0) + 1
+        room = info["room"]
+        room_counts[room] = room_counts.get(room, 0) + 1
     return {"rooms": room_counts}
 
 @app.post("/api/disconnect")
