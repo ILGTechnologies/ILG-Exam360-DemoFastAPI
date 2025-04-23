@@ -67,6 +67,42 @@ async def assign_room(data: AssignRoomRequest):
 
         return {"room": room}
 
+@app.post("/api/assign-room-suspicious")
+async def assign_room_suspicious(data: AssignRoomRequest):
+    global room_index
+    async with assign_lock:
+        # Count only suspicious connected devices
+        current_total = sum(1 for info in active_devices.values() if info.get("suspicious", False))
+
+        # Need to change this later
+        if current_total >= MAX_TOTAL_PARTICIPANTS:
+            return {"room": None, "retry": 30}
+
+        if data.identity in room_assignments:
+            room = room_assignments[data.identity]
+        else:
+            for i in range(100):
+                room_id = f"proctor-room-{i+1}"
+                suspicious_count = sum(
+                    1 for info in active_devices.values()
+                    if info.get("room") == room_id and info.get("suspicious", False)
+                )
+                if suspicious_count < ROOM_BUFFER:
+                    room = room_id
+                    break
+            else:
+                return {"room": None, "retry": 30}
+
+            room_assignments[data.identity] = room
+            active_devices[data.identity] = {
+                "room": room,
+                "status": "connected",
+                "suspicious": True,
+                "last_seen": datetime.utcnow()
+            }
+
+        return {"room": room}
+
 
 # Replace these with your actual LiveKit credentials
 #LIVEKIT_API_KEY = "APIJtTEpvwM9e3y"
@@ -112,7 +148,8 @@ async def register(data: RegisterRequest):
         else:
             device_registry[data.identity] = {
                 "room": data.room,
-                "login_count": 1
+                "login_count": 1,
+                "suspicious_login_count": 0
             }
 
         # Update current active session
@@ -122,6 +159,29 @@ async def register(data: RegisterRequest):
             "last_seen": datetime.utcnow()
         }
         return {"message": "heartbeat received"}
+
+@app.post("/api/register-suspicious")
+async def register_suspicious_user(data: RegisterRequest):
+    async with assign_lock:
+        # Update historical registry
+        if data.identity in device_registry:
+            device_registry[data.identity]["login_count"] += 1
+            device_registry[data.identity]["suspicious_login_count"] += 1
+        else:
+            device_registry[data.identity] = {
+                "room": data.room,
+                "login_count": 1,
+                "suspicious_login_count": 1
+            }
+
+        # Update active device session
+        active_devices[data.identity] = {
+            "room": data.room,
+            "status": "connected",
+            "suspicious": True,
+            "last_seen": datetime.utcnow()
+        }
+        return {"message": "suspicious heartbeat received"}
 
 @app.get("/api/active-devices")
 def get_active_devices():
@@ -193,6 +253,15 @@ def get_livekit_participants(room: str):
 def register_suspicious(data: DisconnectRequest):
     if data.identity in active_devices:
         active_devices[data.identity]["suspicious"] = True
+        # Update suspicious login count in device_registry
+        if data.identity in device_registry:
+            device_registry[data.identity]["suspicious_login_count"] += 1
+        else:
+            device_registry[data.identity] = {
+                "room": "",
+                "login_count": 0,
+                "suspicious_login_count": 1
+            }
         # Try to reassign to a room with available suspicious buffer
         suspicious_counts = {}
         for room_id in set(room_assignments.values()):
