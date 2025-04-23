@@ -18,7 +18,9 @@ app.add_middleware(
 device_registry = {}  # identity -> {room, status, last_seen}
 room_assignments = {}  # identity -> room
 room_index = 0
-MAX_PER_ROOM = 4
+MAX_TOTAL_PARTICIPANTS = 900
+MAX_PER_ROOM = 18
+ROOM_BUFFER = 2  # Reserved slots for suspicious users
 
 class AssignRoomRequest(BaseModel):
     identity: str
@@ -26,14 +28,29 @@ class AssignRoomRequest(BaseModel):
 @app.post("/api/assign-room")
 def assign_room(data: AssignRoomRequest):
     global room_index
+
+    # Count current assignments (active + disconnected)
+    current_total = len(room_assignments)
+    if current_total >= MAX_TOTAL_PARTICIPANTS:
+        return {"room": None, "retry": 30}
+
     if data.identity in room_assignments:
         room = room_assignments[data.identity]
     else:
-        current_count = list(room_assignments.values()).count(f"proctor-room-{room_index+1}")
-        if current_count >= MAX_PER_ROOM:
+        # Try to find a room that isn't full (<= MAX_PER_ROOM)
+        for i in range(room_index + 1):
+            room_id = f"proctor-room-{i+1}"
+            count = list(room_assignments.values()).count(room_id)
+            if count < MAX_PER_ROOM:
+                room = room_id
+                break
+        else:
+            # No available room, create new
             room_index += 1
-        room = f"proctor-room-{room_index+1}"
+            room = f"proctor-room-{room_index+1}"
+
         room_assignments[data.identity] = room
+
     return {"room": room}
 
 
@@ -82,21 +99,18 @@ def register(data: RegisterRequest):
 
 @app.get("/api/active-devices")
 def get_active_devices():
-    threshold = datetime.utcnow() - timedelta(minutes=5)
     active = {
         identity: info for identity, info in device_registry.items()
-        if info['last_seen'] > threshold
     }
     return {"active_devices": active}
 
 @app.get("/api/rooms")
 def get_active_rooms():
-    threshold = datetime.utcnow() - timedelta(minutes=5)
     room_counts = {}
     for identity, info in device_registry.items():
-        if info['last_seen'] > threshold:
-            room = info['room']
-            room_counts[room] = room_counts.get(room, 0) + 1
+        room = info['room']
+        room_counts[room] = room_counts.get(room, 0) + 1
+
     return {"rooms": room_counts}
 
 @app.post("/api/disconnect")
@@ -104,6 +118,9 @@ def disconnect(data: DisconnectRequest):
     if data.identity in device_registry:
         device_registry[data.identity]["status"] = "disconnected"
         device_registry[data.identity]["last_seen"] = datetime.utcnow()
+        # Remove from room_assignments and update total count
+        if data.identity in room_assignments:
+            del room_assignments[data.identity]
         return {"message": f"{data.identity} marked as disconnected"}
     else:
         return {"message": f"{data.identity} not found"}, 404
@@ -114,20 +131,18 @@ def get_version():
 
 @app.get("/api/room-members")
 def get_room_members():
-    threshold = datetime.utcnow() - timedelta(minutes=5)
     room_members = {}
     for identity, info in device_registry.items():
-        if info['last_seen'] > threshold:
-            room = info['room']
-            room_members.setdefault(room, []).append(identity)
+        room = info['room']
+        room_members.setdefault(room, []).append(identity)
+        
     return {"room_members": room_members}
 
 @app.get("/api/room-members/{room}")
 def get_members_for_room(room: str):
-    threshold = datetime.utcnow() - timedelta(minutes=5)
     members = [
         identity for identity, info in device_registry.items()
-        if info['room'] == room and info['last_seen'] > threshold
+        if info.get("room") == room
     ]
     return {"room": room, "members": members}
 
@@ -152,3 +167,24 @@ def get_livekit_participants(room: str):
     except Exception as e:
         print(f"❌ Error listing participants for room '{room}': {e}")
         return {"error": str(e)}, 500
+    
+@app.post("/api/register_suspicious")
+def register_suspicious(data: DisconnectRequest):
+    if data.identity in device_registry:
+        device_registry[data.identity]["suspicious"] = True
+        # Try to reassign to a room with available suspicious buffer
+        suspicious_counts = {}
+        for room_id in set(room_assignments.values()):
+            suspicious_counts[room_id] = sum(
+                1 for i in device_registry
+                if device_registry[i].get("room") == room_id and device_registry[i].get("suspicious", False)
+            )
+        for i in range(room_index + 1):
+            room_id = f"proctor-room-{i+1}"
+            if suspicious_counts.get(room_id, 0) < ROOM_BUFFER:
+                device_registry[data.identity]["room"] = room_id
+                room_assignments[data.identity] = room_id
+                return {"message": f"{data.identity} marked as suspicious and added to {room_id}"}
+        return {"message": f"{data.identity} marked as suspicious but no buffer slot available"}, 429
+    else:
+        return {"message": f"{data.identity} not found"}, 404
