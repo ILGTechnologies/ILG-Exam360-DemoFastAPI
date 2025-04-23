@@ -123,14 +123,13 @@ def get_active_rooms():
 async def disconnect(data: DisconnectRequest):
     async with assign_lock:
         if data.identity in device_registry:
-            device_registry[data.identity]["status"] = "disconnected"
-            device_registry[data.identity]["last_seen"] = datetime.utcnow()
+            del device_registry[data.identity]
             # Remove from room_assignments and update total count
-            if data.identity in room_assignments:
-                del room_assignments[data.identity]
-            return {"message": f"{data.identity} marked as disconnected"}
-        else:
-            return {"message": f"{data.identity} not found"}, 404
+        if data.identity in room_assignments:
+            del room_assignments[data.identity]
+        
+        return {"message": f"{data.identity} marked as disconnected"}
+        
 
 @app.get("/api/version")
 def get_version():
