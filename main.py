@@ -198,7 +198,13 @@ def register_suspicious(data: DisconnectRequest):
     
 @app.get("/api/metrics")
 def get_metrics():
-    return {
-        "assigned_rooms": len(room_assignments),
-        "registered_devices": len(device_registry)
-    }
+    connected = sum(1 for info in device_registry.values() if info.get("status") == "connected")
+    suspicious_connected = sum(
+        1 for info in device_registry.values()
+        if info.get("status") == "connected" and info.get("suspicious", False)
+        return {
+            "registered_devices": len(device_registry),
+            "connected_devices": connected,
+            "suspicious_connected": suspicious_connected
+        }
+    )
