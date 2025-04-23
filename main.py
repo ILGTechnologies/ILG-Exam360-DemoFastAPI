@@ -175,6 +175,7 @@ def clear_database():
     global device_registry, room_assignments, room_index
     device_registry.clear()
     room_assignments.clear()
+    active_devices.clear()
     room_index = 0
     return {"message": "In-memory database has been cleared."}
 
@@ -211,13 +212,13 @@ def register_suspicious(data: DisconnectRequest):
     
 @app.get("/api/metrics")
 def get_metrics():
-    connected = sum(1 for info in active_devices.values() if info.get("status") == "connected")
+    
     suspicious_connected = sum(
         1 for info in active_devices.values()
         if info.get("status") == "connected" and info.get("suspicious", False)
     )
     return {
         "registered_devices": len(device_registry),
-        "connected_devices": connected,
+        "connected_devices": len(active_devices),
         "suspicious_connected": suspicious_connected
     }
