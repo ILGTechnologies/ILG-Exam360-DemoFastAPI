@@ -43,18 +43,20 @@ async def assign_room(data: AssignRoomRequest):
             room = room_assignments[data.identity]
         else:
             # Strictly enforce MAX_PER_ROOM limit using device_registry (connected users per room)
+            room_index = 0
             for i in range(room_index + 1):
                 room_id = f"proctor-room-{i+1}"
                 connected_count = sum(
                     1 for info in device_registry.values()
                     if info.get("room") == room_id
                 )
+                
                 if connected_count < MAX_PER_ROOM:
-                    room = room_id
                     break
-            else:
+
                 room_index += 1
-                room = f"proctor-room-{room_index}"
+    
+            room = f"proctor-room-{room_index}"
 
             room_assignments[data.identity] = room
             device_registry[data.identity] = {
