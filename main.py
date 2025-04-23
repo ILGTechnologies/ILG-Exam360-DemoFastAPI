@@ -1,3 +1,6 @@
+from asyncio import Lock
+assign_lock = Lock()
+
 from livekit import AccessToken, VideoGrant, RoomServiceClient
 from pydantic import BaseModel
 from fastapi import FastAPI
@@ -26,37 +29,33 @@ class AssignRoomRequest(BaseModel):
     identity: str
 
 @app.post("/api/assign-room")
-def assign_room(data: AssignRoomRequest):
+async def assign_room(data: AssignRoomRequest):
     global room_index
+    async with assign_lock:
+        current_total = len(room_assignments)
+        print("Current Total", current_total)
+        if current_total >= MAX_TOTAL_PARTICIPANTS:
+            return {"room": None, "retry": 30}
 
-    # Count current assignments (active + disconnected)
-    current_total = len(room_assignments)
-    print("Current Total", current_total)
-    if current_total >= MAX_TOTAL_PARTICIPANTS:
-        return {"room": None, "retry": 30}
-
-    if data.identity in room_assignments:
-        room = room_assignments[data.identity]
-    else:
-        # Try to find a room that isn't full (<= MAX_PER_ROOM)
-        for i in range(room_index + 1):
-            room_id = f"proctor-room-{i+1}"
-            count = list(room_assignments.values()).count(room_id)
-            print("Current room count: for - ", f"proctor-room-{i+1} is ", count)
-            if count < MAX_PER_ROOM:
-                room = room_id
-                break
+        if data.identity in room_assignments:
+            room = room_assignments[data.identity]
         else:
-            # No available room, create new
-            room_index += 1
-            print("Creating a new room for: ", data.identity, "room index: ", room_index)
-            room = f"proctor-room-{room_index+1}"
+            for i in range(room_index + 1):
+                room_id = f"proctor-room-{i+1}"
+                count = list(room_assignments.values()).count(room_id)
+                print("Current room count: for - ", f"proctor-room-{i+1} is ", count)
+                if count < MAX_PER_ROOM:
+                    room = room_id
+                    break
+            else:
+                room_index += 1
+                print("Creating a new room for: ", data.identity, "room index: ", room_index)
+                room = f"proctor-room-{room_index+1}"
 
-        print("New Total: ", len(room_assignments))
+            print("New Total: ", len(room_assignments))
+            room_assignments[data.identity] = room
 
-        room_assignments[data.identity] = room
-
-    return {"room": room}
+        return {"room": room}
 
 
 # Replace these with your actual LiveKit credentials
@@ -94,13 +93,14 @@ def get_token(data: TokenRequest):
     return {"token": token}
 
 @app.post("/api/register")
-def register(data: RegisterRequest):
-    device_registry[data.identity] = {
-        "room": data.room,
-        "status": "connected",
-        "last_seen": datetime.utcnow()
-    }
-    return {"message": "heartbeat received"}
+async def register(data: RegisterRequest):
+    async with assign_lock:
+        device_registry[data.identity] = {
+            "room": data.room,
+            "status": "connected",
+            "last_seen": datetime.utcnow()
+        }
+        return {"message": "heartbeat received"}
 
 @app.get("/api/active-devices")
 def get_active_devices():
