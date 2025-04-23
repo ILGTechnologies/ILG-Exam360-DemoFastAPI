@@ -29,44 +29,32 @@ class AssignRoomRequest(BaseModel):
 def assign_room(data: AssignRoomRequest):
     global room_index
 
-    # Count current assignments
+    # Count current assignments (active + disconnected)
     current_total = len(room_assignments)
+    print("Current Total", current_total)
     if current_total >= MAX_TOTAL_PARTICIPANTS:
         return {"room": None, "retry": 30}
 
     if data.identity in room_assignments:
         room = room_assignments[data.identity]
     else:
-        is_suspicious = device_registry.get(data.identity, {}).get("suspicious", False)
-
+        # Try to find a room that isn't full (<= MAX_PER_ROOM)
         for i in range(room_index + 1):
             room_id = f"proctor-room-{i+1}"
-
-            regular_count = sum(
-                1 for identity, info in device_registry.items()
-                if info.get("room") == room_id and not info.get("suspicious", False)
-            )
-            suspicious_count = sum(
-                1 for identity, info in device_registry.items()
-                if info.get("room") == room_id and info.get("suspicious", False)
-            )
-
-            if (not is_suspicious and regular_count < MAX_PER_ROOM) or \
-               (is_suspicious and suspicious_count < ROOM_BUFFER):
+            count = list(room_assignments.values()).count(room_id)
+            print("Current room count: for - ", f"proctor-room-{i+1} is ", count)
+            if count < MAX_PER_ROOM:
                 room = room_id
                 break
         else:
-            # No suitable room, create new
+            # No available room, create new
             room_index += 1
+            print("Creating a new room for: ", data.identity, "room index: ", room_index)
             room = f"proctor-room-{room_index+1}"
 
+        print("New Total: ", len(room_assignments))
+
         room_assignments[data.identity] = room
-        device_registry[data.identity] = {
-            "room": room,
-            "status": "connected",
-            "last_seen": datetime.utcnow(),
-            "suspicious": is_suspicious
-        }
 
     return {"room": room}
 
