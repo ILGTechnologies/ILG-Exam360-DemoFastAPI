@@ -193,3 +193,10 @@ def register_suspicious(data: DisconnectRequest):
         return {"message": f"{data.identity} marked as suspicious but no buffer slot available"}, 429
     else:
         return {"message": f"{data.identity} not found"}, 404
+    
+@app.get("/api/metrics")
+def get_metrics():
+    return {
+        "assigned_rooms": len(room_assignments),
+        "registered_devices": len(device_registry)
+    }
