@@ -32,7 +32,11 @@ class AssignRoomRequest(BaseModel):
 async def assign_room(data: AssignRoomRequest):
     global room_index
     async with assign_lock:
-        current_total = len(room_assignments)
+        # Count only connected devices for total participants
+        current_total = len([
+            info for info in device_registry.values()
+            if info.get("status") == "connected"
+        ])
         print("Current Total", current_total)
         if current_total >= MAX_TOTAL_PARTICIPANTS:
             return {"room": None, "retry": 30}
@@ -40,20 +44,26 @@ async def assign_room(data: AssignRoomRequest):
         if data.identity in room_assignments:
             room = room_assignments[data.identity]
         else:
+            # Strictly enforce MAX_PER_ROOM limit using device_registry (connected users per room)
             for i in range(room_index + 1):
                 room_id = f"proctor-room-{i+1}"
-                count = list(room_assignments.values()).count(room_id)
-                print("Current room count: for - ", f"proctor-room-{i+1} is ", count)
-                if count < MAX_PER_ROOM:
+                connected_count = sum(
+                    1 for info in device_registry.values()
+                    if info.get("room") == room_id and info.get("status") == "connected"
+                )
+                if connected_count < MAX_PER_ROOM:
                     room = room_id
                     break
             else:
                 room_index += 1
-                print("Creating a new room for: ", data.identity, "room index: ", room_index)
                 room = f"proctor-room-{room_index+1}"
 
-            print("New Total: ", len(room_assignments))
             room_assignments[data.identity] = room
+            device_registry[data.identity] = {
+                "room": room,
+                "status": "connected",
+                "last_seen": datetime.utcnow()
+            }
 
         return {"room": room}
 
