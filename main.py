@@ -79,18 +79,19 @@ class DisconnectRequest(BaseModel):
     identity: str
 
 @app.post("/api/token")
-def get_token(data: TokenRequest):
-    grant = VideoGrant(room=data.room)
-    grant.room_join = True  # 👈 optional but sometimes required
-    at = AccessToken(
-        LIVEKIT_API_KEY,
-        LIVEKIT_API_SECRET,
-        identity=data.identity,
-        name=data.identity,
-        grant=grant
-    )
-    token = at.to_jwt()
-    return {"token": token}
+async def get_token(data: TokenRequest):
+    async with assign_lock: 
+        grant = VideoGrant(room=data.room)
+        grant.room_join = True  # 👈 optional but sometimes required
+        at = AccessToken(
+            LIVEKIT_API_KEY,
+            LIVEKIT_API_SECRET,
+            identity=data.identity,
+            name=data.identity,
+            grant=grant
+        )
+        token = at.to_jwt()
+        return {"token": token}
 
 @app.post("/api/register")
 async def register(data: RegisterRequest):
@@ -119,16 +120,17 @@ def get_active_rooms():
     return {"rooms": room_counts}
 
 @app.post("/api/disconnect")
-def disconnect(data: DisconnectRequest):
-    if data.identity in device_registry:
-        device_registry[data.identity]["status"] = "disconnected"
-        device_registry[data.identity]["last_seen"] = datetime.utcnow()
-        # Remove from room_assignments and update total count
-        if data.identity in room_assignments:
-            del room_assignments[data.identity]
-        return {"message": f"{data.identity} marked as disconnected"}
-    else:
-        return {"message": f"{data.identity} not found"}, 404
+async def disconnect(data: DisconnectRequest):
+    async with assign_lock:
+        if data.identity in device_registry:
+            device_registry[data.identity]["status"] = "disconnected"
+            device_registry[data.identity]["last_seen"] = datetime.utcnow()
+            # Remove from room_assignments and update total count
+            if data.identity in room_assignments:
+                del room_assignments[data.identity]
+            return {"message": f"{data.identity} marked as disconnected"}
+        else:
+            return {"message": f"{data.identity} not found"}, 404
 
 @app.get("/api/version")
 def get_version():
