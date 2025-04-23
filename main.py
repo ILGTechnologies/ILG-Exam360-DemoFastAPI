@@ -33,10 +33,8 @@ async def assign_room(data: AssignRoomRequest):
     global room_index
     async with assign_lock:
         # Count only connected devices for total participants
-        current_total = len([
-            info for info in device_registry.values()
-            if info.get("status") == "connected"
-        ])
+        current_total = len(device_registry)
+
         print("Current Total", current_total)
         if current_total >= MAX_TOTAL_PARTICIPANTS:
             return {"room": None, "retry": 30}
@@ -49,7 +47,7 @@ async def assign_room(data: AssignRoomRequest):
                 room_id = f"proctor-room-{i+1}"
                 connected_count = sum(
                     1 for info in device_registry.values()
-                    if info.get("room") == room_id and info.get("status") == "connected"
+                    if info.get("room") == room_id
                 )
                 if connected_count < MAX_PER_ROOM:
                     room = room_id
