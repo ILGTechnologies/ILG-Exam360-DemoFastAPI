@@ -54,7 +54,7 @@ async def assign_room(data: AssignRoomRequest):
                     break
             else:
                 room_index += 1
-                room = f"proctor-room-{room_index+1}"
+                room = f"proctor-room-{room_index}"
 
             room_assignments[data.identity] = room
             device_registry[data.identity] = {
