@@ -114,9 +114,9 @@ def get_active_devices():
 def get_active_rooms():
     room_counts = {}
     for identity, info in device_registry.items():
-        room = info['room']
-        room_counts[room] = room_counts.get(room, 0) + 1
-
+        if info.get("status") == "connected":
+            room = info["room"]
+            room_counts[room] = room_counts.get(room, 0) + 1
     return {"rooms": room_counts}
 
 @app.post("/api/disconnect")
