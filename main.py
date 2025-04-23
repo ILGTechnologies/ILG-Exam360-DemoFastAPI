@@ -19,6 +19,7 @@ app.add_middleware(
 
 # Global in-memory device registry
 device_registry = {}  # identity -> {room, status, last_seen}
+active_devices = {}  # identity -> {room, status, last_seen, suspicious}
 room_assignments = {}  # identity -> room
 room_index = 0
 MAX_TOTAL_PARTICIPANTS = 900
@@ -33,7 +34,7 @@ async def assign_room(data: AssignRoomRequest):
     global room_index
     async with assign_lock:
         # Count only connected devices for total participants
-        current_total = len(device_registry)
+        current_total = len(active_devices)
 
         print("Current Total", current_total)
         if current_total >= MAX_TOTAL_PARTICIPANTS:
@@ -42,13 +43,13 @@ async def assign_room(data: AssignRoomRequest):
         if data.identity in room_assignments:
             room = room_assignments[data.identity]
         else:
-            # Strictly enforce MAX_PER_ROOM limit using device_registry (connected users per room)
+            # Strictly enforce MAX_PER_ROOM limit using active_devices (connected users per room)
             room_index = 0
             for i in range(100):
                 room_index += 1
                 room_id = f"proctor-room-{i+1}"
                 connected_count = sum(
-                    1 for info in device_registry.values()
+                    1 for info in active_devices.values()
                     if info.get("room") == room_id
                 )
                 
@@ -58,7 +59,7 @@ async def assign_room(data: AssignRoomRequest):
             room = f"proctor-room-{room_index}"
 
             room_assignments[data.identity] = room
-            device_registry[data.identity] = {
+            active_devices[data.identity] = {
                 "room": room,
                 "status": "connected",
                 "last_seen": datetime.utcnow()
@@ -105,7 +106,17 @@ async def get_token(data: TokenRequest):
 @app.post("/api/register")
 async def register(data: RegisterRequest):
     async with assign_lock:
-        device_registry[data.identity] = {
+        # Update historical registry
+        if data.identity in device_registry:
+            device_registry[data.identity]["login_count"] += 1
+        else:
+            device_registry[data.identity] = {
+                "room": data.room,
+                "login_count": 1
+            }
+
+        # Update current active session
+        active_devices[data.identity] = {
             "room": data.room,
             "status": "connected",
             "last_seen": datetime.utcnow()
@@ -114,15 +125,12 @@ async def register(data: RegisterRequest):
 
 @app.get("/api/active-devices")
 def get_active_devices():
-    active = {
-        identity: info for identity, info in device_registry.items()
-    }
-    return {"active_devices": active}
+    return {"active_devices": active_devices}
 
 @app.get("/api/rooms")
 def get_active_rooms():
     room_counts = {}
-    for identity, info in device_registry.items():
+    for identity, info in active_devices.items():
         room = info["room"]
         room_counts[room] = room_counts.get(room, 0) + 1
     return {"rooms": room_counts}
@@ -130,12 +138,10 @@ def get_active_rooms():
 @app.post("/api/disconnect")
 async def disconnect(data: DisconnectRequest):
     async with assign_lock:
-        if data.identity in device_registry:
-            del device_registry[data.identity]
-            # Remove from room_assignments and update total count
+        if data.identity in active_devices:
+            del active_devices[data.identity]
         if data.identity in room_assignments:
             del room_assignments[data.identity]
-        
         return {"message": f"{data.identity} marked as disconnected"}
         
 
@@ -146,7 +152,7 @@ def get_version():
 @app.get("/api/room-members")
 def get_room_members():
     room_members = {}
-    for identity, info in device_registry.items():
+    for identity, info in active_devices.items():
         room = info['room']
         room_members.setdefault(room, []).append(identity)
         
@@ -155,7 +161,7 @@ def get_room_members():
 @app.get("/api/room-members/{room}")
 def get_members_for_room(room: str):
     members = [
-        identity for identity, info in device_registry.items()
+        identity for identity, info in active_devices.items()
         if info.get("room") == room
     ]
     return {"room": room, "members": members}
@@ -184,19 +190,19 @@ def get_livekit_participants(room: str):
     
 @app.post("/api/register_suspicious")
 def register_suspicious(data: DisconnectRequest):
-    if data.identity in device_registry:
-        device_registry[data.identity]["suspicious"] = True
+    if data.identity in active_devices:
+        active_devices[data.identity]["suspicious"] = True
         # Try to reassign to a room with available suspicious buffer
         suspicious_counts = {}
         for room_id in set(room_assignments.values()):
             suspicious_counts[room_id] = sum(
-                1 for i in device_registry
-                if device_registry[i].get("room") == room_id and device_registry[i].get("suspicious", False)
+                1 for i in active_devices
+                if active_devices[i].get("room") == room_id and active_devices[i].get("suspicious", False)
             )
         for i in range(room_index + 1):
             room_id = f"proctor-room-{i+1}"
             if suspicious_counts.get(room_id, 0) < ROOM_BUFFER:
-                device_registry[data.identity]["room"] = room_id
+                active_devices[data.identity]["room"] = room_id
                 room_assignments[data.identity] = room_id
                 return {"message": f"{data.identity} marked as suspicious and added to {room_id}"}
         return {"message": f"{data.identity} marked as suspicious but no buffer slot available"}, 429
@@ -205,9 +211,9 @@ def register_suspicious(data: DisconnectRequest):
     
 @app.get("/api/metrics")
 def get_metrics():
-    connected = sum(1 for info in device_registry.values() if info.get("status") == "connected")
+    connected = sum(1 for info in active_devices.values() if info.get("status") == "connected")
     suspicious_connected = sum(
-        1 for info in device_registry.values()
+        1 for info in active_devices.values()
         if info.get("status") == "connected" and info.get("suspicious", False)
     )
     return {
