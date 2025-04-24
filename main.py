@@ -221,7 +221,8 @@ def get_room_members():
 @app.get("/api/room-members/{room}")
 def get_members_for_room(room: str):
     members = [
-        identity for identity, info in active_devices.items()
+        {"identity": identity, **info}
+        for identity, info in active_devices.items()
         if info.get("room") == room
     ]
     return {"room": room, "members": members}
