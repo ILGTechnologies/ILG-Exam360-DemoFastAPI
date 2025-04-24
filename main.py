@@ -203,7 +203,6 @@ async def disconnect(data: DisconnectRequest):
         if data.identity in room_assignments:
             del room_assignments[data.identity]
         return {"message": f"{data.identity} marked as disconnected"}
-        
 
 @app.get("/api/version")
 def get_version():
@@ -249,36 +248,6 @@ def get_livekit_participants(room: str):
     except Exception as e:
         print(f"❌ Error listing participants for room '{room}': {e}")
         return {"error": str(e)}, 500
-    
-@app.post("/api/register_suspicious")
-def register_suspicious(data: DisconnectRequest):
-    if data.identity in active_devices:
-        active_devices[data.identity]["suspicious"] = True
-        # Update suspicious login count in device_registry
-        if data.identity in device_registry:
-            device_registry[data.identity]["suspicious_login_count"] += 1
-        else:
-            device_registry[data.identity] = {
-                "room": "",
-                "login_count": 0,
-                "suspicious_login_count": 1
-            }
-        # Try to reassign to a room with available suspicious buffer
-        suspicious_counts = {}
-        for room_id in set(room_assignments.values()):
-            suspicious_counts[room_id] = sum(
-                1 for i in active_devices
-                if active_devices[i].get("room") == room_id and active_devices[i].get("suspicious", False)
-            )
-        for i in range(room_index + 1):
-            room_id = f"proctor-room-{i+1}"
-            if suspicious_counts.get(room_id, 0) < ROOM_BUFFER:
-                active_devices[data.identity]["room"] = room_id
-                room_assignments[data.identity] = room_id
-                return {"message": f"{data.identity} marked as suspicious and added to {room_id}"}
-        return {"message": f"{data.identity} marked as suspicious but no buffer slot available"}, 429
-    else:
-        return {"message": f"{data.identity} not found"}, 404
     
 @app.get("/api/metrics")
 def get_metrics():
