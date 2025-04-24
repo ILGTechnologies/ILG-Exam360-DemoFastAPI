@@ -220,7 +220,11 @@ def get_room_members():
 @app.get("/api/room-members/{room}")
 def get_members_for_room(room: str):
     members = [
-        {"identity": identity, **info}
+        {
+            "identity": identity,
+            **info,
+            **device_registry.get(identity, {})  # merge login counts
+        }
         for identity, info in active_devices.items()
         if info.get("room") == room
     ]
