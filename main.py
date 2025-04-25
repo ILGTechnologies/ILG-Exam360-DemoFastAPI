@@ -126,7 +126,12 @@ class DisconnectRequest(BaseModel):
 
 @app.post("/api/token")
 async def get_token(data: TokenRequest):
-    async with assign_lock: 
+    async with assign_lock:
+        assigned_room = room_assignments.get(data.identity)
+        if assigned_room != data.room:
+            print(f"🚨 Token request mismatch: identity={data.identity} requested={data.room} but assigned={assigned_room}")
+            return {"error": "Room mismatch for identity"}, 400
+
         grant = VideoGrant(room=data.room)
         grant.room_join = True  # 👈 optional but sometimes required
         at = AccessToken(
